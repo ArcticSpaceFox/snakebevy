@@ -30,6 +30,7 @@ impl Size {
 
 struct SnakeHead {
     direction: Direction,
+    try_direction: Direction,
 }
 struct Materials {
     head_material: Handle<ColorMaterial>,
@@ -61,7 +62,7 @@ impl Default for FoodSpawnTimer {
     }
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 enum Direction {
     Left,
     Up,
@@ -123,6 +124,7 @@ fn spawn_initial_snake(
         })
         .with(SnakeHead {
             direction: Direction::Up,
+            try_direction: Direction::Up,
         })
         .with(Position { x: 3, y: 3 })
         .with(Size::square(0.8));
@@ -144,8 +146,31 @@ fn spawn_segment(
     commands.current_entity().unwrap()
 }
 
+fn handle_movement(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&mut SnakeHead>) {
+    for mut head in heads.iter_mut() {
+        head.try_direction = if head.direction != Direction::Left
+            && (keyboard_input.pressed(KeyCode::Left) || keyboard_input.pressed(KeyCode::A))
+        {
+            Direction::Left
+        } else if head.direction != Direction::Down
+            && (keyboard_input.pressed(KeyCode::Down) || keyboard_input.pressed(KeyCode::S))
+        {
+            Direction::Down
+        } else if head.direction != Direction::Up
+            && (keyboard_input.pressed(KeyCode::Up) || keyboard_input.pressed(KeyCode::W))
+        {
+            Direction::Up
+        } else if head.direction != Direction::Right
+            && (keyboard_input.pressed(KeyCode::Right) || keyboard_input.pressed(KeyCode::D))
+        {
+            Direction::Right
+        } else {
+            head.try_direction
+        };
+    }
+}
+
 fn snake_movement(
-    keyboard_input: Res<Input<KeyCode>>,
     snake_timer: ResMut<SnakeMoveTimer>,
     mut game_over_events: ResMut<Events<GameOverEvent>>,
     mut last_tail_position: ResMut<LastTailPosition>,
@@ -158,18 +183,7 @@ fn snake_movement(
     }
     for (head_entity, mut head) in heads.iter_mut() {
         let mut head_pos = positions.get_mut(head_entity).unwrap();
-        let dir: Direction =
-            if keyboard_input.pressed(KeyCode::Left) || keyboard_input.pressed(KeyCode::A) {
-                Direction::Left
-            } else if keyboard_input.pressed(KeyCode::Down) || keyboard_input.pressed(KeyCode::S) {
-                Direction::Down
-            } else if keyboard_input.pressed(KeyCode::Up) || keyboard_input.pressed(KeyCode::W) {
-                Direction::Up
-            } else if keyboard_input.pressed(KeyCode::Right) || keyboard_input.pressed(KeyCode::D) {
-                Direction::Right
-            } else {
-                head.direction
-            };
+        let dir = head.try_direction;
         if dir != head.direction.opposite() {
             head.direction = dir;
         }
@@ -215,6 +229,7 @@ fn snake_movement(
     }
 }
 
+#[allow(clippy::clippy::too_many_arguments)]
 fn game_over(
     mut commands: Commands,
     mut reader: Local<EventReader<GameOverEvent>>,
@@ -349,6 +364,7 @@ fn main() {
         .add_startup_stage("game_setup")
         .add_startup_system_to_stage("game_setup", game_setup.system())
         .add_system(snake_timer.system())
+        .add_system(handle_movement.system())
         .add_system(snake_movement.system())
         .add_system(snake_eating.system())
         .add_system(snake_growth.system())
